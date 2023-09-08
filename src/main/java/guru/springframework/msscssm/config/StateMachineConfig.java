@@ -39,16 +39,21 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
     @Override
     public void configure(StateMachineTransitionConfigurer<PaymentState, PaymentEvent> transitions) throws Exception {
         transitions.withExternal().source(PaymentState.NEW).target(PaymentState.NEW).event(PaymentEvent.PRE_AUTHORIZE)
-                    .action(preAuthAction())
+                .action(preAuthAction())
                 .and()
                 .withExternal().source(PaymentState.NEW).target(PaymentState.PRE_AUTH).event(PaymentEvent.PRE_AUTH_APPROVED)
                 .and()
-                .withExternal().source(PaymentState.NEW).target(PaymentState.PRE_AUTH_ERROR).event(PaymentEvent.PRE_AUTH_DECLINED);
+                .withExternal().source(PaymentState.NEW).target(PaymentState.PRE_AUTH_ERROR).event(PaymentEvent.PRE_AUTH_DECLINED)
+                .and()
+                .withExternal().source(PaymentState.PRE_AUTH).target(PaymentState.AUTH).event(PaymentEvent.AUTH_APPROVED)
+                .action(authApprove())
+                .and()
+                .withExternal().source(PaymentState.PRE_AUTH).target(PaymentState.AUTH_ERROR).event(PaymentEvent.AUTH_DECLINED);
     }
 
     @Override
     public void configure(StateMachineConfigurationConfigurer<PaymentState, PaymentEvent> config) throws Exception {
-        StateMachineListenerAdapter<PaymentState, PaymentEvent> adapter = new StateMachineListenerAdapter<>(){
+        StateMachineListenerAdapter<PaymentState, PaymentEvent> adapter = new StateMachineListenerAdapter<>() {
             @Override
             public void stateChanged(State<PaymentState, PaymentEvent> from, State<PaymentState, PaymentEvent> to) {
                 log.info(String.format("stateChanged(from: %s, to: %s)", from, to));
@@ -59,19 +64,38 @@ public class StateMachineConfig extends StateMachineConfigurerAdapter<PaymentSta
                 .listener(adapter);
     }
 
-    public Action<PaymentState, PaymentEvent> preAuthAction(){
+    public Action<PaymentState, PaymentEvent> preAuthAction() {
         return context -> {
             System.out.println("PreAuth was called!!!");
 
             if (new Random().nextInt(10) < 8) {
                 System.out.println("Approved");
                 context.getStateMachine().sendEvent(MessageBuilder.withPayload(PaymentEvent.PRE_AUTH_APPROVED)
-                    .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, context.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
-                    .build());
+                        .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, context.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                        .build());
 
             } else {
                 System.out.println("Declined! No Credit!!!!!!");
                 context.getStateMachine().sendEvent(MessageBuilder.withPayload(PaymentEvent.PRE_AUTH_DECLINED)
+                        .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, context.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                        .build());
+            }
+        };
+    }
+
+    private Action<PaymentState, PaymentEvent> authApprove() {
+        return context -> {
+            System.out.println("Auth approve was called!!!");
+
+            if (new Random().nextInt(10) < 8) {
+                System.out.println("Approved");
+                context.getStateMachine().sendEvent(MessageBuilder.withPayload(PaymentEvent.AUTH_APPROVED)
+                        .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, context.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
+                        .build());
+
+            } else {
+                System.out.println("Error!!!!!!");
+                context.getStateMachine().sendEvent(MessageBuilder.withPayload(PaymentEvent.AUTH_DECLINED)
                         .setHeader(PaymentServiceImpl.PAYMENT_ID_HEADER, context.getMessageHeader(PaymentServiceImpl.PAYMENT_ID_HEADER))
                         .build());
             }
